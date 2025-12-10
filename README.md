@@ -1,7 +1,7 @@
 # llm-code-review-action
 A container GitHub Action to review a pull request by OpenAI's LLM Model.
 
-If the size of a pull request is over the maximum chunk size of the HuggingFace API, the Action will split the pull request into multiple chunks and generate review comments for each chunk.
+If the size of a pull request is over the maximum chunk size of the OpenAI API, the Action will split the pull request into multiple chunks and generate review comments for each chunk.
 And then the Action summarizes the review comments and posts a review comment to the pull request.
 
 ## Pre-requisites
@@ -16,7 +16,6 @@ We have to set a GitHub Actions secret `OPENAI_API_KEY` to use the OpenAI API so
 - `gitCommitHash`: The git commit hash to post a review comment.
 - `pullRequestDiff`: The diff of the pull request to generate a review comment.
 - `pullRequestDiffChunkSize`: The chunk size of the diff of the pull request to generate a review comment.
-- `repoId`: LLM repository id on HuggingFace.
 - `temperature`: The temperature to generate a review comment.
 - `topP`: The top_p to generate a review comment.
 - `topK`: The top_k to generate a review comment.
@@ -42,29 +41,32 @@ on:
       - "LICENSE"
 
 jobs:
-  review:
-    runs-on: ubuntu-latest
+  build:
     permissions:
       contents: read
       pull-requests: write
+    runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v3
-      - name: "Get diff of the pull request"
-        id: get_diff
-        shell: bash
-        env:
-          PULL_REQUEST_HEAD_REF: "${{ github.event.pull_request.head.ref }}"
-        run: |-
-          git fetch origin "${{ env.PULL_REQUEST_HEAD_REF }}:${{ env.PULL_REQUEST_HEAD_REF }}"
-          git checkout "${{ env.PULL_REQUEST_HEAD_REF }}"
-          git diff "origin/${{ env.PULL_REQUEST_HEAD_REF }}" > "diff.txt"
-          # shellcheck disable=SC2086
-          echo "diff=$(cat "diff.txt")" >> $GITHUB_ENV
-      - uses: koganei/llm-code-review@v0.0.1
+        with:
+          fetch-depth: 0 # needed to checkout all branches for the diff action to work
+
+      # Check the PR diff using the current branch and the base branch of the PR
+      - uses: GrantBirki/git-diff-action@v2.4.1
+        id: git-diff-action
+        with:
+          json_diff_file_output: diff.json
+          raw_diff_file_output: diff.txt
+          file_output_only: "false"
+
+      - uses: koganei/llm-code-review@main
         name: "Code Review"
         id: review
+        env:
+          DIFF: ${{ steps.git-diff-action.outputs.raw-diff-path }}
         with:
-          apiKey: ${{ secrets.API_KEY }}
+          apiKey: ${{ secrets.OPENAI_API_KEY }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           githubRepository: ${{ github.repository }}
           githubPullRequestNumber: ${{ github.event.pull_request.number }}
@@ -74,7 +76,7 @@ jobs:
           topK: "50"
           topP: "0.95"
           pullRequestDiff: |-
-            ${{ steps.get_diff.outputs.pull_request_diff }}
+            $(cat $DIFF)
           pullRequestChunkSize: "3500"
           logLevel: "DEBUG"
 ```

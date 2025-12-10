@@ -85,19 +85,23 @@ def get_review(
         )
     for chunked_diff in chunked_diff_list:
         question=chunked_diff
-        template = """Provide a concise summary of the bug found in the code, describing its characteristics, 
-        location, and potential effects on the overall functionality and performance of the application.
-        Present the potential issues and errors first, following by the most important findings, in your summary
-        Important: Include block of code / diff in the summary also the line number.
+        template = """
+        Provide a summary of the changes below. The summary should be one to two paragraphs long.
+        Assess what the code used to do and what the code does now.
+        Focus on major modifications, additions, deletions, and any significant updates within the files.
+        Describe the changes in a clear and concise manner for the reviewer to understand the changes.
+        Also present potential issues and errors. Attempt to find weaknesses in the code and suggest improvements.        
+        
+        Important: Include blocks of code (surrounded by ```) where appropriate.
 
         Diff:
 
-        {question}
+        {diff}
         """
 
-        prompt = PromptTemplate(template=template, input_variables=["question"])
+        prompt = PromptTemplate(template=template, input_variables=["diff"])
         llm_chain = LLMChain(prompt=prompt, llm=llm)
-        review_result = llm_chain.run(question)
+        review_result = llm_chain.invoke(question)
         chunked_reviews.append(review_result)
 
     # If the chunked reviews are only one, return it
